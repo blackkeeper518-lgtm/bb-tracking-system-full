@@ -20,7 +20,7 @@ type ParcelRpcResponse = {
 // Paste the Supabase publishable/anon key here.
 // Do NOT paste a service_role/secret key into browser code.
 const supabaseUrl = "https://yyqptukudsuizpklfrdd.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5cXB0dWt1ZHN1aXpwa2xmcmRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzU5ODAsImV4cCI6MjA5NzUxMTk4MH0.6z_NdqgTBfVKTUVssv_MOnyhGAWViv72PikgW5EuIxQ"; // ใส่ publishable/anon key ในบรรทัดนี้
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxa21qZmpzdG52bGludGZlamx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI4NTU5NDksImV4cCI6MjEwODQzMTk0OX0.zDfyYiFQMsyIU0w_wdCL6nXtsFzrp6IrhFywWBEneh0"; // ใส่ publishable/anon key ในบรรทัดนี้
 const supabase = supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 export default function BB_STORE_V31_FIXED() {
@@ -221,13 +221,38 @@ export default function BB_STORE_V31_FIXED() {
           )}
         </form>
 
+        <section className="mb-8 space-y-3 rounded-2xl border border-pink-500/30 bg-white/5 p-4 shadow-[0_0_24px_rgba(226,17,119,0.16)]">
+          <div className="text-center">
+            <h2 className="text-lg font-black text-pink-100">ติดตามพัสดุ FLASH EXPRESS</h2>
+            <p className="mt-1 text-sm text-gray-300">กรอกเลขพัสดุในช่องด้านล่าง เพื่อดูสถานะโดยไม่ออกจากเว็บไซต์นี้</p>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-pink-500/40 bg-white p-2">
+            <iframe
+              src="https://www.flashexpress.co.th/fle/widget-tracking"
+              title="วิดเจ็ตติดตามพัสดุ FLASH EXPRESS"
+              width={420}
+              height={300}
+              frameBorder={0}
+              scrolling="auto"
+              loading="lazy"
+              className="mx-auto block w-full max-w-[420px] border-0 bg-white"
+            />
+          </div>
+          <a
+            href="https://www.flashexpress.co.th/fle/tracking"
+            target="_blank"
+            rel="noreferrer"
+            className="block text-center text-xs text-pink-200 underline"
+          >
+            ถ้าวิดเจ็ตไม่แสดง เปิดหน้าติดตาม FLASH แทน
+          </a>
+        </section>
+
         {trackingData.length > 0 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {trackingData.map((parcel, index) => {
               const recipientName = cleanName(parcel.consignee);
               const trackingNumber = String(parcel.tracking_number ?? "");
-              const carrier = "FLASH EXPRESS";
-              const trackingUrl = `https://www.flashexpress.co.th/tracking/?trackNo=${encodeURIComponent(trackingNumber)}`;
 
               return (
                 <section
@@ -280,16 +305,6 @@ export default function BB_STORE_V31_FIXED() {
                   </div>
 
                   <div className="grid gap-3">
-                    <a
-                      href={trackingUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block p-5 border-2 border-dashed border-pink-500/50 rounded-2xl bg-pink-500/10 text-center active:scale-95 transition-transform"
-                    >
-                      <span className="text-lg font-black text-white italic tracking-tighter neon-glow-white uppercase">
-                        👉 ดูสถานะจริงที่ {carrier}
-                      </span>
-                    </a>
                     <a
                       href="https://line.me/ti/p/@bbstore"
                       target="_blank"
