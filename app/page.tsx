@@ -20,7 +20,7 @@ type ParcelRpcResponse = {
 // Paste the Supabase publishable/anon key here.
 // Do NOT paste a service_role/secret key into browser code.
 const supabaseUrl = "https://yyqptukudsuizpklfrdd.supabase.co";
-const supabaseAnonKey = ""; // ใส่ publishable/anon key ในบรรทัดนี้
+const supabaseAnonKey = "sb_publishable_ImWiQ_F7KJ0op9Tm7NU4yg_MyMPhFVU"; // ใส่ publishable/anon key ในบรรทัดนี้
 const supabase = supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 export default function BB_STORE_V31_FIXED() {
