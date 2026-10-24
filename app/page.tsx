@@ -1,64 +1,123 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, type FormEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  "https://yyqptukudsuizpklfrdd.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5cXB0dWt1ZHN1aXpwa2xmcmRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzU5ODAsImV4cCI6MjA5NzUxMTk4MH0.6z_NdqgTBfVKTUVssv_MOnyhGAWViv72PikgW5EuIxQ"
-);
+type Parcel = {
+  id?: number | string;
+  consignee?: string | null;
+  tracking_number?: string | null;
+  cod_amount?: number | string | null;
+  pickup_date?: string | null;
+};
 
-export default function SINGTO_STORE_V31_FIXED() {
-  const [phone, setPhone] = useState("");
-  const [trackingData, setTrackingData] = useState<any>(null);
+type ParcelRpcResponse = {
+  success?: boolean;
+  reason?: string;
+  data?: Parcel[] | Parcel | null;
+};
+
+// Paste the Supabase publishable/anon key here.
+// Do NOT paste a service_role/secret key into browser code.
+const supabaseUrl = "https://yyqptukudsuizpklfrdd.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5cXB0dWt1ZHN1aXpwa2xmcmRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzU5ODAsImV4cCI6MjA5NzUxMTk4MH0.6z_NdqgTBfVKTUVssv_MOnyhGAWViv72PikgW5EuIxQ"; // ใส่ publishable/anon key ในบรรทัดนี้
+const supabase = supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
+export default function BB_STORE_V31_FIXED() {
+  const [phone_number, setPhoneNumber] = useState("");
+  const [trackingData, setTrackingData] = useState<Parcel[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+  const [copiedTracking, setCopiedTracking] = useState("");
 
-  const cleanName = (name: string) => {
-    return name ? name.replace(/^[0-9\s]+/, "") : "ลูกค้า VIP";
+  const cleanName = (value?: string | null) => {
+    const name = String(value ?? "").replace(/^[0-9\s]+/, "").trim();
+    return name || "ลูกค้า VIP";
   };
 
-  const handleSearch = async () => {
-    if (phone.length < 10) {
-      alert("กรุณากรอกเบอร์โทรศัพท์ให้ครบ 10 หลักครับ");
+  const formatCod = (value?: number | string | null) => {
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount) ? amount.toLocaleString("th-TH") : String(value ?? "0");
+  };
+
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedPhone = phone_number.replace(/\D/g, "");
+    setPhoneNumber(normalizedPhone);
+    setError("");
+    setTrackingData([]);
+    setCopiedTracking("");
+
+    if (normalizedPhone.length !== 10) {
+      setError("กรุณากรอกเบอร์โทรศัพท์ 10 หลักค่ะ");
+      return;
+    }
+
+    if (!supabase) {
+      setError("ยังไม่ได้ตั้งค่า Supabase URL หรือ Publishable/anon key ค่ะ");
       return;
     }
 
     setLoading(true);
-    setError('');
-    setResult(null);
-    setTrackingData(null);
+    try {
+      // RPC searches public.parcels.phone_number (and order_phone if configured)
+      // while keeping direct anonymous SELECT on the parcels table disabled.
+      const { data, error: rpcError } = await supabase.rpc(
+        "get_parcel_by_phone_v2",
+        { search_phone: normalizedPhone },
+      );
 
-// ใส่ : any เพื่อบอกให้ TypeScript เลิกจู้จี้เรื่อง Type ของ data และ error
-const { data, error }: any = await supabase.rpc('get_parcel_by_phone_v2', { 
-  search_phone: phone 
-});
+      if (rpcError) throw new Error(rpcError.message);
 
-    setLoading(false);
+      const payload = (data ?? null) as ParcelRpcResponse | null;
+      if (!payload?.success) {
+        setError(payload?.reason || "ไม่พบข้อมูลพัสดุค่ะ");
+        return;
+      }
 
-    if (error) {
-      console.error('Supabase Error:', error);
-      setError(`ระบบมีปัญหา: ${error.message}`);
-      return;
+      const rawRows = payload.data;
+      const rows: Parcel[] = Array.isArray(rawRows)
+        ? rawRows
+        : rawRows
+          ? [rawRows]
+          : [];
+
+      if (rows.length === 0) {
+        setError("ไม่พบข้อมูลพัสดุค่ะ");
+        return;
+      }
+
+      setTrackingData(rows);
+      console.log(`พบพัสดุ ${rows.length} รายการ`);
+    } catch (caughtError: unknown) {
+      console.error("Supabase RPC error:", caughtError);
+      const message = caughtError instanceof Error ? caughtError.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+      setError(`ค้นหาไม่สำเร็จ: ${message}`);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (data?.success) {
-      setResult(data.data);
-      setTrackingData(data.data);
-      console.log(`เจอแล้วด้วยวิธี: ${data.found_by}`);
-    } else {
-      setError(data?.reason || 'ไม่พบข้อมูล');
+  const copyTrackingNumber = async (trackingNumber: string) => {
+    try {
+      await navigator.clipboard.writeText(trackingNumber);
+      setCopiedTracking(trackingNumber);
+      window.setTimeout(() => setCopiedTracking(""), 2000);
+    } catch (caughtError) {
+      console.error("Clipboard error:", caughtError);
+      setError("คัดลอกเลขพัสดุไม่สำเร็จ กรุณากดค้างแล้วคัดลอกค่ะ");
     }
   };
 
   return (
+    <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden bg-[#05000a] font-sans px-4 py-10">
+      <link
+        href="https://fonts.googleapis.com/css2?family=Rubik+Puddles&family=Sriracha&display=swap"
+        rel="stylesheet"
+      />
 
-    <main className="min-h-screen flex items-center justify-center text-white relative overflow-hidden bg-[#05000a] font-sans px-4">
-      <link href="https://fonts.googleapis.com/css2?family=Rubik+Puddles&family=Sriracha&display=swap" rel="stylesheet" />
-      
-      {/* 🌌 Background ม่วงอวกาศ */}
+      {/* Space-purple background */}
       <div className="absolute inset-0 bg-gradient-to-br from-[#1a0033] via-[#05000a] to-black" />
       <div className="absolute top-[-5%] right-[-5%] w-[450px] h-[450px] bg-[#E21177] opacity-[0.12] blur-[100px] rounded-full" />
       <div className="absolute bottom-[-5%] left-[-5%] w-[350px] h-[350px] bg-[#4b0082] opacity-[0.1] blur-[90px] rounded-full" />
@@ -67,14 +126,13 @@ const { data, error }: any = await supabase.rpc('get_parcel_by_phone_v2', {
         @keyframes rotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes logoSweep { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         @keyframes bounceName { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
-        
+
         .neon-glow-purple { text-shadow: 0 0 10px #E21177, 0 0 20px #4b0082; }
         .neon-glow-white { text-shadow: 0 0 8px rgba(255,255,255,0.9); }
-        
-        /* ✅ แก้ไขไฟวิ่งให้คมกริบ (Ultra Precise Border) */
+
         .neon-card-wrapper {
           position: relative;
-          padding: 2px; /* ความหนาของเส้นไฟ */
+          padding: 2px;
           background: rgba(255, 255, 255, 0.05);
           border-radius: 1.5rem;
           overflow: hidden;
@@ -98,11 +156,10 @@ const { data, error }: any = await supabase.rpc('get_parcel_by_phone_v2', {
           z-index: 1;
           width: 100%;
           height: 100%;
-          background: #0d001a; /* สีพื้นหลังข้างในปุ่ม/การ์ด */
+          background: #0d001a;
           border-radius: calc(1.5rem - 2px);
         }
 
-        /* สำหรับปุ่มเช็คพัสดุโดยเฉพาะ */
         .btn-inner {
           background: linear-gradient(to bottom right, #4b0082, #E21177);
           border-radius: calc(1.5rem - 2px);
@@ -113,81 +170,147 @@ const { data, error }: any = await supabase.rpc('get_parcel_by_phone_v2', {
 
       <div className="relative z-10 w-full max-w-md p-6">
         <div className="text-center mb-10">
-          <h1 className="text-7xl font-black tracking-tighter bg-gradient-to-r from-white via-[#E21177] to-white bg-[length:200%_auto] text-transparent bg-clip-text animate-[logoSweep_5s_linear_infinite] drop-shadow-[0_0_20px_rgba(226,17,119,0.8)] leading-tight" style={{ fontFamily: "'Rubik Puddles', cursive" }}>
+          <h1
+            className="text-7xl font-black tracking-tighter bg-gradient-to-r from-white via-[#E21177] to-white bg-[length:200%_auto] text-transparent bg-clip-text animate-[logoSweep_5s_linear_infinite] drop-shadow-[0_0_20px_rgba(226,17,119,0.8)] leading-tight"
+            style={{ fontFamily: "'Rubik Puddles', cursive" }}
+          >
             BB STORE
           </h1>
           <div className="mt-2 flex flex-col gap-2">
-            <p className="text-2xl font-bold text-white neon-glow-white tracking-widest uppercase italic" style={{ fontFamily: "'Sriracha', cursive" }}>✧บุหรี่นอกราคาส่ง✧</p>
+            <p
+              className="text-2xl font-bold text-white neon-glow-white tracking-widest uppercase italic"
+              style={{ fontFamily: "'Sriracha', cursive" }}
+            >
+              ✧บุหรี่นอกราคาส่ง✧
+            </p>
             <p className="text-[10px] tracking-[0.05em] text-pink-300 font-bold uppercase neon-glow-purple opacity-90 leading-relaxed">
-              {"| \"𝓑𝓑ᵀᴹ° | แหล่งรวมไอเทม สายควัน แห่งสมรภูมิออนไลน์"}
+              {'| "𝓑𝓑ᵀᴹ° | แหล่งรวมไอเทม สายควัน แห่งสมรภูมิออนไลน์'}
             </p>
           </div>
         </div>
 
-        {/* 🔍 INPUT & BUTTON */}
-        <div className="space-y-5 mb-8">
-          <input 
-            type="tel" 
-            value={phone} 
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} 
-            placeholder="กรอกเบอร์โทรศัพท์" 
-            className="w-full p-5 text-center text-2xl bg-white/5 backdrop-blur-xl border border-white/20 rounded-2xl outline-none focus:border-[#E21177] text-white" 
+        <form onSubmit={handleSearch} className="space-y-4 mb-8">
+          <input
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel"
+            maxLength={10}
+            value={phone_number}
+            onChange={(event) => setPhoneNumber(event.target.value.replace(/\D/g, "").slice(0, 10))}
+            placeholder="กรอกเบอร์โทรศัพท์"
+            aria-label="เบอร์โทรศัพท์สำหรับค้นหาพัสดุ"
+            className="w-full p-5 text-center text-2xl bg-white/5 backdrop-blur-xl border border-white/20 rounded-2xl outline-none focus:border-[#E21177] text-white"
           />
-          
-          {/* ✅ ปุ่มไฟวิ่งแบบใหม่ บาลานซ์เป๊ะ */}
-          <div className="neon-card-wrapper group active:scale-95 transition-transform cursor-pointer" onClick={handleSearch}>
-            <div className="neon-card-inner btn-inner w-full py-5 text-center">
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="neon-card-wrapper group active:scale-95 transition-transform cursor-pointer w-full disabled:opacity-60 disabled:cursor-wait"
+          >
+            <span className="neon-card-inner btn-inner block w-full py-5 text-center">
               <span className="neon-glow-white font-black text-xl uppercase tracking-widest">
                 {loading ? "กำลังค้นหา..." : "เช็คเลขพัสดุ"}
               </span>
-            </div>
-          </div>
-        </div>
+            </span>
+          </button>
 
-        {/* 📦 RESULT AREA */}
-        {trackingData && (
+          {error && (
+            <p role="alert" className="rounded-xl border border-red-400/40 bg-red-950/40 p-3 text-center text-sm text-red-200 break-words">
+              {error}
+            </p>
+          )}
+        </form>
+
+        {trackingData.length > 0 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            
-            {/* ✅ ป้ายชื่อลูกค้า VIP ไฟวิ่งคมกริบ */}
-            <div className="neon-card-wrapper shadow-[0_0_30px_rgba(226,17,119,0.4)]">
-              <div className="neon-card-inner bg-[#05000a]/95 p-6 text-center">
-                <span className="text-xs text-pink-400 font-black uppercase tracking-[0.2em] neon-glow-purple">คุณคือลูกค้า VIP</span>
-                <div className="animate-[bounceName_2s_infinite] mt-2">
-                  <h2 className="text-4xl text-white font-black uppercase tracking-tight neon-glow-white leading-tight" style={{ fontFamily: "'Sriracha', cursive" }}>
-                    {cleanName(trackingData.consignee)}
-                  </h2>
-                </div>
-              </div>
-            </div>
+            {trackingData.map((parcel, index) => {
+              const recipientName = cleanName(parcel.consignee);
+              const trackingNumber = String(parcel.tracking_number ?? "");
+              const carrier = "FLASH EXPRESS";
+              const trackingUrl = `https://www.flashexpress.co.th/tracking/?trackNo=${encodeURIComponent(trackingNumber)}`;
 
-            {/* เลขพัสดุ */}
-            <div onClick={() => { navigator.clipboard.writeText(trackingData.tracking_number); setCopied(true); setTimeout(() => setCopied(false), 2000); }} 
-              className="p-5 bg-white/5 border border-white/10 rounded-2xl cursor-pointer text-center relative hover:bg-white/10 transition-all shadow-lg overflow-hidden">
-              <p className="text-xs text-gray-500 mb-1 uppercase tracking-tighter">แตะคัดลอกเลขพัสดุ</p>
-              <p className="text-2xl font-mono font-bold text-pink-200 tracking-[0.1em] neon-glow-purple uppercase">{trackingData.tracking_number}</p>
-              {copied && <div className="absolute inset-0 flex items-center justify-center bg-[#E21177] rounded-2xl font-bold animate-in fade-in neon-glow-white">COPIED!</div>}
-            </div>
+              return (
+                <section
+                  key={String(parcel.id ?? `${trackingNumber}-${index}`)}
+                  className="space-y-6 border-t border-pink-500/20 pt-6 first:border-0 first:pt-0"
+                >
+                  <div className="neon-card-wrapper shadow-[0_0_30px_rgba(226,17,119,0.4)]">
+                    <div className="neon-card-inner bg-[#05000a]/95 p-6 text-center">
+                      <span className="text-xs text-pink-400 font-black uppercase tracking-[0.2em] neon-glow-purple">
+                        คุณคือลูกค้า VIP
+                      </span>
+                      <div className="animate-[bounceName_2s_infinite] mt-2">
+                        <h2
+                          className="text-4xl text-white font-black uppercase tracking-tight neon-glow-white leading-tight"
+                          style={{ fontFamily: "'Sriracha', cursive" }}
+                        >
+                          {recipientName}
+                        </h2>
+                      </div>
+                    </div>
+                  </div>
 
-            {/* ยอด COD */}
-            <div className="py-2 text-center">
-                <p className="text-xs text-gray-400 uppercase font-bold tracking-widest neon-glow-white opacity-60">ยอดชำระปลายทาง</p>
-                <p className="text-7xl text-white font-black neon-glow-purple mt-1 drop-shadow-xl leading-none">฿{trackingData.cod_amount.toLocaleString()}</p>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => copyTrackingNumber(trackingNumber)}
+                    className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl cursor-pointer text-center relative hover:bg-white/10 transition-all shadow-lg overflow-hidden"
+                    aria-label={`คัดลอกเลขพัสดุ ${trackingNumber}`}
+                  >
+                    <span className="block text-xs text-gray-400 mb-1 uppercase tracking-tighter">
+                      {copiedTracking === trackingNumber ? "คัดลอกแล้ว" : "แตะคัดลอกเลขพัสดุ"}
+                    </span>
+                    <span className="block text-2xl font-mono font-bold text-pink-200 tracking-[0.1em] neon-glow-purple uppercase break-all">
+                      {trackingNumber || "ไม่พบเลขพัสดุ"}
+                    </span>
+                  </button>
 
-            {/* ปุ่มอื่นๆ */}
-            <div className="grid gap-3">
-              <a href={`https://www.flashexpress.co.th/tracking/?trackNo=${trackingData.tracking_number}`} target="_blank" className="block p-5 border-2 border-dashed border-pink-500/50 rounded-2xl bg-pink-500/10 text-center animate-pulse active:scale-95 transition-transform">
-                  <p className="text-lg font-black text-white italic tracking-tighter neon-glow-white uppercase">👉 ดูสถานะจริงที่ FLASH EXPRESS</p>
-              </a>
-              <a href="https://line.me/ti/p/@bbstore" target="_blank" className="block py-4 rounded-xl font-bold text-white text-center bg-[#06C755] shadow-lg hover:scale-[1.02] transition-transform">
-                💬 สอบถามแอดมิน: @bbstore
-              </a>
-            </div>
+                  {parcel.pickup_date && (
+                    <p className="text-center text-sm text-gray-400">
+                      วันที่รับพัสดุ: {parcel.pickup_date}
+                    </p>
+                  )}
 
-            <div className="mt-4 p-5 border-2 border-dashed border-pink-500/50 rounded-2xl bg-pink-500/10 text-center animate-pulse shadow-lg">
-                <p className="text-[10px] text-pink-300 font-bold uppercase tracking-widest mb-1 neon-glow-purple">Special Offer for you</p>
-                <p className="text-lg font-black text-white italic tracking-tight neon-glow-white">แอดไลน์ลุ้นเล่นกิจกรรม รับของรางวัลเพียบ</p>
-            </div>
+                  <div className="py-2 text-center">
+                    <p className="text-xs text-gray-400 uppercase font-bold tracking-widest neon-glow-white opacity-70">
+                      ยอดชำระปลายทาง
+                    </p>
+                    <p className="text-6xl sm:text-7xl text-white font-black neon-glow-purple mt-1 drop-shadow-xl leading-none">
+                      ฿{formatCod(parcel.cod_amount)}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3">
+                    <a
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block p-5 border-2 border-dashed border-pink-500/50 rounded-2xl bg-pink-500/10 text-center active:scale-95 transition-transform"
+                    >
+                      <span className="text-lg font-black text-white italic tracking-tighter neon-glow-white uppercase">
+                        👉 ดูสถานะจริงที่ {carrier}
+                      </span>
+                    </a>
+                    <a
+                      href="https://line.me/ti/p/@bbstore"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block py-4 rounded-xl font-bold text-white text-center bg-[#06C755] shadow-lg hover:scale-[1.02] transition-transform"
+                    >
+                      💬 สอบถามแอดมิน: @bbstore
+                    </a>
+                  </div>
+
+                  <div className="mt-4 p-5 border-2 border-dashed border-pink-500/50 rounded-2xl bg-pink-500/10 text-center shadow-lg">
+                    <p className="text-[10px] text-pink-300 font-bold uppercase tracking-widest mb-1 neon-glow-purple">
+                      Special Offer for you
+                    </p>
+                    <p className="text-lg font-black text-white italic tracking-tight neon-glow-white">
+                      แอดไลน์ รอรับโปรโมชั่นพิเศษ
+                    </p>
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
       </div>
